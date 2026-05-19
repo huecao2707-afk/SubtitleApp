@@ -1,58 +1,57 @@
-# Module B (Speech-to-Text - Whisper)
+# Module B (Speech-to-Text - Faster-Whisper)
 import os
-import whisper
-import torch
+from faster_whisper import WhisperModel
 
 class AIEngine:
-    def __init__(self,model_size="base"):
-        ffmpeg_path = os.getcwd() 
-        if ffmpeg_path not in os.environ["PATH"]:
-            os.environ["PATH"] += os.pathsep + ffmpeg_path
-        'Khởi tạo AI Engine'
-        # Kiểm tra xem có card đồ họa NVIDIA (CUDA) không để tăng tốc
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # Load mode Whisper
-        print(f"--- Đang tải mode Whisper [{model_size}] trên {self.device} ---")
+    def __init__(self, model_size="small"):
+        # Tự động chọn CPU và ép kiểu int8 để chạy nhanh
+        self.device = "cpu"
+        self.compute_type = "int8"
+        
+        print(f"--- Đang tải Faster-Whisper [{model_size}] trên {self.device} (Type: {self.compute_type}) ---")
         try:
-            self.model = whisper.load_model(model_size,device=self.device)
-            print("--- Tải model thành công  ---")
+            self.model = WhisperModel(model_size, device=self.device, compute_type=self.compute_type)
+            print("--- Tải model thành công ---")
         except Exception as e:
-            print(f"Lỗi khi tải model")
+            print(f"Lỗi khi tải model: {e}")
             self.model = None
 
-    def transcribe_audio(self,audio_path):
+    def transcribe_audio(self, audio_path, language="vi"):
         if self.model is None:
-            print("Lỗi : Model chưa được khởi tạo")
+            print("Lỗi: Model chưa được khởi tạo")
             return []
-        
-        'Thực hiện nhận diện giọng nói và trả về dữ liệu kèm timestamp'
+            
         if not os.path.exists(audio_path):
-            return f"Lỗi: không tìm thấy file {audio_path}"
+            print(f"Lỗi: không tìm thấy file {audio_path}")
+            return []
+
         print(f"--- Đang xử lý âm thanh: {os.path.basename(audio_path)} ---")
 
-        use_fp16 = True if self.device == "cuda" else False
-
-        # Chạy nhận diện
-        # Whisper tự động nhận diện Language Detection
         try:
-            result = self.model.transcribe(audio_path, verbose = False, fp16 = use_fp16)
+            segments, info = self.model.transcribe(
+                audio_path,
+                language=language,
+                beam_size=5,
+                word_timestamps=True, 
+                vad_filter=True,
+                vad_parameters=dict(threshold=0.2, min_silence_duration_ms=500, speech_pad_ms=500),
+                condition_on_previous_text=False,
+                temperature=(0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+            )
 
-            # In ra ngôn ngữ đã nhận diện cho người dùng biết
-            detected_lang = result.get("language", "Không xác định")
-            print(f"--- Ngôn ngữ nhận diện được: {detected_lang.upper()} ---")
+            print(f"--- Ngôn ngữ nhận diện được: {info.language.upper()} với xác suất {info.language_probability:.2f} ---")
 
-            # Cấu trúc đầu ra
             transcription_output = []
-
-            for segment in result["segments"]:
+            for segment in segments:
                 item = {
-                    "Start_time": round(segment["start"] , 2),
-                    "End_time": round(segment["end"] , 2),
-                    "Original_Text": segment["text"].strip()
+                    "Start_time": round(segment.start, 2),
+                    "End_time": round(segment.end, 2),
+                    "Original_Text": segment.text.strip()
                 }
                 transcription_output.append(item)
+                
             return transcription_output
+            
         except Exception as e:
             print(f"Lỗi trong quá trình nhận diện: {e}")
             return []

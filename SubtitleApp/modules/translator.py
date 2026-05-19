@@ -1,1 +1,0 @@
-# Module C (Dịch thuật & Định dạng SRT)

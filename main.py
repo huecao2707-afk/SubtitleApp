@@ -1,46 +1,48 @@
 # File chạy chính (Kết nối 3 module)
 import os
-from modules.ai_engine import AIEngine
-def format_timestamp(seconds: float):
-    'Chuyển đổi giây sang định dạng srt: HH,MM,SS,mmm'
-    td_hours = int(seconds //3600)
-    td_minutes = int((seconds % 3600) // 60)
-    td_seconds = int(seconds % 60)
-    td_milliseconds = int(round((seconds - int(seconds) * 1000)))
-    return f"{td_hours:02}:{td_minutes:02}:{td_seconds:02}:{td_milliseconds:03}"
 
-def save_to_srt(data,output_path):
-    try:
-        os.makedirs(os.path.dirname(output_path), exist_ok = True)
-        with open(output_path, "w" ,encoding="utf-8") as f:
-            for i, item in enumerate(data, start= 1):
-                start = format_timestamp(item['Start_time'])
-                end = format_timestamp(item['End_time'])
-                text = item['Original_Text']
-                
-                f.write(f"{i}\n")
-                f.write(f"{start}-->{end}\n")
-                f.write(f"{text}\n\n")
-        print(f"--- Đã xuất file phụ đề thành công tại: {output_path}")
-    except Exception as e:
-        print(f"Lỗi khi lưu file srt: {e}")
+FFMPEG_DLL_DIR = os.path.join(os.path.dirname(__file__), "ffmpeg_lib")
+# Chỉ dùng cơ chế add_dll_directory trên Windows.
+if os.path.isdir(FFMPEG_DLL_DIR):
+    if hasattr(os, "add_dll_directory"):
+        os.add_dll_directory(FFMPEG_DLL_DIR)
+
+    # Cập nhật PATH để cả subprocess (demucs/ffmpeg) cũng tìm được DLL phụ thuộc.
+    os.environ["PATH"] = FFMPEG_DLL_DIR + os.pathsep + os.environ.get("PATH", "")
+else:
+    print(f"[FFmpeg] Chưa thấy folder DLL: {FFMPEG_DLL_DIR}")
+
+from modules.media_processor import MediaProcessor # Nạp Module 1
+from modules.ai_engine import AIEngine           # Nạp Module 2
 def main():
-    audio_file = "input/test1.mp4" 
-    output_file = "output/result.srt" # Đổi đuôi file thành .srt
+    video_input = "input/file1.mp4" 
     
-    engine = AIEngine(model_size="base")
-    results = engine.transcribe_audio(audio_file)
+    # ==========================================
+    # CHẠY MODULE 1: RÚT TRÍCH VÀ LỌC ÂM THANH
+    # ==========================================
+    media_mod = MediaProcessor()
+    # Truyền mp4 vào, nhận lại wav sạch
+    clean_audio_path = media_mod.extract_vocals_with_demucs(video_input) 
     
-    if results:
-        # Xuất ra file .srt
-        save_to_srt(results, output_file)
-        
-        # Vẫn in ra console để theo dõi
-        print("\n--- Nội dung phụ đề ---")
-        for line in results:
-            print(f"[{line['Start_time']}s] {line['Original_Text']}")
-    else:
-        print("Không có dữ liệu để xuất phụ đề.")
+    if not clean_audio_path:
+        print("Dừng chương trình: Không có âm thanh để xử lý.")
+        return
+
+    # ==========================================
+    # CHẠY MODULE 2: AI NHẬN DIỆN GIỌNG NÓI
+    # ==========================================
+    ai_mod = AIEngine(model_size="small") # Dùng model small int8 cho nhanh
+    
+    # Truyền file wav sạch (chỉ có giọng người) vào cho AI nghe
+    subtitles_data = ai_mod.transcribe_audio(clean_audio_path)
+    
+    # ==========================================
+    # TẠM THAY THẾ MODULE 3: IN KẾT QUẢ
+    # ==========================================
+    if subtitles_data:
+        print("\n=== KẾT QUẢ NHẬN DIỆN ===")
+        for sub in subtitles_data:
+            print(f"[{sub['Start_time']}s -> {sub['End_time']}s] {sub['Original_Text']}")
 
 if __name__ == "__main__":
     main()

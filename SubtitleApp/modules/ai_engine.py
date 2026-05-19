@@ -1,1 +1,0 @@
-# Module B (Speech-to-Text - Whisper)

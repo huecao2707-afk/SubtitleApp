@@ -1,0 +1,4 @@
+- [x] Hiểu nguyên nhân lỗi khi dọn FFmpeg DLL vào thư mục riêng
+- [x] Sửa `main.py` để thêm đường dẫn DLL `ffmpeg_lib` vào runtime (Windows)
+- [ ] (Nếu cần) Sửa `maingui.py` để dùng chung cơ chế load DLL
+- [x] Chạy thử `python main.py` để kiểm tra lỗi DLL
