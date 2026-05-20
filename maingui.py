@@ -116,12 +116,14 @@ class SubtitleAppUI(ctk.CTk):
     def on_focus_in(self, event, entry_widget, variable, data_list):
         """Khi click vào ô: Lưu giá trị chuẩn hiện tại và xoá trắng chữ để gõ/xem list"""
         current_val = variable.get()
+
         if current_val in data_list:
             entry_widget._last_valid_value = current_val
 
-        variable.set("") # Xoá trắng text
-        self.on_type(None, entry_widget, variable, data_list) # Mở listbox hiển thị toàn bộ
+        variable.set("")
 
+        # Delay nhẹ để Entry update trước khi hiện list
+        self.after(10, lambda: self.on_type(None, entry_widget, variable, data_list))
     def on_focus_out(self, event, entry_widget, variable, data_list):
         """Khi click ra ngoài: Phục hồi lại dữ liệu nếu bỏ trống hoặc nhập sai"""
         def restore_state():
