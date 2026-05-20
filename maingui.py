@@ -2,6 +2,8 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog
 import os
+from modules.ai_engine import AIEngine
+from modules.translator import SubtitleTranslator
 
 # Danh sách 99 ngôn ngữ hỗ trợ bởi Whisper
 FULL_LANGUAGES = [
@@ -19,6 +21,17 @@ FULL_LANGUAGES = [
     "Tatar", "Telugu", "Thai", "Tibetan", "Turkish", "Turkmen", "Ukrainian", "Urdu",
     "Uzbek", "Vietnamese", "Welsh", "Yiddish", "Yoruba"
 ]
+LANGUAGE_CODES = {
+    "Vietnamese": "vi",
+    "English": "en",
+    "Japanese": "ja",
+    "Korean": "ko",
+    "Chinese": "zh-cn",
+    "French": "fr",
+    "German": "de",
+    "Thai": "th"
+}
+
 
 class SubtitleAppUI(ctk.CTk):
     def __init__(self):
@@ -190,21 +203,63 @@ class SubtitleAppUI(ctk.CTk):
             self.textbox.see("end")
 
     def start_process(self):
+
         if not self.selected_file:
             self.textbox.insert("end", "[LỖI] Vui lòng chọn file media trước!\n")
             self.textbox.see("end")
             return
 
-        model = self.model_var.get()
-        source = self.lang_orig_var.get()
-        target = self.lang_trans_var.get()
+        try:
+            model = self.model_var.get()
+            source = self.lang_orig_var.get()
+            target = self.lang_trans_var.get()
 
-        self.textbox.insert("end", "-"*40 + "\n")
-        self.textbox.insert("end", f"Đang khởi tạo AI Model: [{model.upper()}]\n")
-        self.textbox.insert("end", f"Ngôn ngữ video: {source}\n")
-        self.textbox.insert("end", f"Sẽ dịch sang: {target}\n")
-        self.textbox.insert("end", "Đang xử lý, vui lòng đợi...\n")
-        self.textbox.see("end")
+            self.textbox.insert("end", "-" * 40 + "\n")
+            self.textbox.insert("end", f"Đang load AI model: {model}\n")
+            self.textbox.see("end")
+
+            # Khởi tạo AI
+            engine = AIEngine(model_size=model)
+
+            self.textbox.insert("end", "Đang nhận diện giọng nói...\n")
+            self.textbox.see("end")
+
+            # Speech to text
+            results = engine.transcribe_audio(self.selected_file)
+
+            if not results:
+                self.textbox.insert("end", "[LỖI] Không nhận diện được phụ đề.\n")
+                return
+
+            # Convert tên ngôn ngữ -> code
+            target_code = LANGUAGE_CODES.get(target, "vi")
+
+            self.textbox.insert("end", f"Đang dịch sang: {target}\n")
+            self.textbox.see("end")
+
+            # Translator
+            translator = SubtitleTranslator(
+                target_language=target_code
+            )
+
+            translated_results = translator.translate_segments(results)
+
+            # File output
+            output_path = "output/result.srt"
+
+            # Save SRT
+            translator.save_to_srt(
+                translated_results,
+                output_path
+            )
+
+            self.textbox.insert("end", f"\n✅ Hoàn tất!\n")
+            self.textbox.insert("end", f"Đã lưu tại: {output_path}\n")
+            self.textbox.see("end")
+
+        except Exception as e:
+            self.textbox.insert("end", f"[LỖI] {e}\n")
+            self.textbox.see("end")
 
 if __name__ == "__main__":
     app = SubtitleAppUI()
