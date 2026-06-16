@@ -1,1 +1,8 @@
 ffmpeg.exe
+.env
+config.py
+__pycache__/
+ffmpeg_lib
+whisper_env/
+output/
+vocal\htdemucs

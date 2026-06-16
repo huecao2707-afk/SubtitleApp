@@ -1,50 +1,56 @@
-# Module B (Speech-to-Text - Faster Whisper)
 import os
-from faster_whisper import WhisperModel
+import gc
+import logging
 import torch
+import whisperx
+
+logger = logging.getLogger(__name__)
 
 class AIEngine:
-    def __init__(self, model_size="small"): 
-        # Khởi tạo AI Engine với Faster-Whisper
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        self.compute_type = "float16" if self.device == "cuda" else "int8"
-        
-        print(f"--- [Module B] Đang tải model Faster-Whisper [{model_size}] trên {self.device} ---")
-        try:
-            self.model = WhisperModel(model_size, device=self.device, compute_type=self.compute_type)
-            print("--- [Module B] Tải model thành công ---")
-        except Exception as e:
-            print(f"Lỗi khi tải model: {e}")
-            self.model = None
+    def __init__(self, model_size: str = "small"):
+        self.model_size = model_size
 
-    def transcribe_audio(self, audio_path):
-        if self.model is None:
-            print("Lỗi: Model chưa được khởi tạo")
-            return [], None
-        
-        if not os.path.exists(audio_path):
-            print(f"Lỗi: Không tìm thấy file {audio_path}")
-            return [], None
-            
-        print(f"--- [Module B] Đang nhận diện âm thanh (vui lòng đợi): {os.path.basename(audio_path)} ---")
+    # Thêm tham số language_code và initial_prompt với giá trị mặc định là None
+    def transcribe_audio(self, audio_path, language_code=None, initial_prompt=None):
+        if not os.path.exists(audio_path): return []
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        compute_type = "float16" if device == "cuda" else "int8"
+        model = None
+        model_a = None
 
         try:
-            # Faster-Whisper quét một lượt toàn bộ file, giữ nguyên vẹn Timestamp
-            segments, info = self.model.transcribe(audio_path, beam_size=5,vad_filter=True, 
-                vad_parameters=dict(min_silence_duration_ms=500))
-            print(f"--- [Module B] Ngôn ngữ nhận diện được: {info.language.upper()} (Độ tin cậy: {info.language_probability:.2f}) ---")
-
-            transcription_output = []
-            
-            for segment in segments:
-                item = {
-                    "Start_time": round(segment.start, 3),
-                    "End_time": round(segment.end, 3),
-                    "Original_Text": segment.text.strip()
-                }
-                transcription_output.append(item)
+            with torch.no_grad():
+                # Vẫn giữ VAD khắt khe để chặn tạp âm ầm ĩ
+                vad_options = {"vad_onset": 0.750, "vad_offset": 0.500}
+                model = whisperx.load_model(self.model_size, device=device, compute_type=compute_type, vad_options=vad_options)
                 
-            return transcription_output, info.language
-        except Exception as e:
-            print(f"Lỗi trong quá trình nhận diện: {e}")
-            return [], None
+                # Cấu hình các tham số cốt lõi chống ảo giác
+                transcribe_kwargs = {
+                    "batch_size": 8,
+                }
+                
+                # Gắn thêm tham số linh hoạt nếu người dùng có truyền vào
+                if language_code:
+                    transcribe_kwargs["language"] = language_code
+                if initial_prompt:
+                    transcribe_kwargs["initial_prompt"] = initial_prompt
+
+                # Truyền unpacking dictionary vào hàm transcribe
+                result = model.transcribe(audio_path, **transcribe_kwargs)
+                
+                # Xác định ngôn ngữ để load model Align (ưu tiên ngôn ngữ được truyền vào, nếu không có thì lấy cái tự nhận diện)
+                detected_language = language_code or result.get("language")
+                if not detected_language: raise RuntimeError("Không nhận diện được ngôn ngữ.")
+
+                model_a, metadata = whisperx.load_align_model(language_code=detected_language, device=device)
+                result = whisperx.align(result["segments"], model_a, metadata, audio_path, device, return_char_alignments=False)
+                
+                return result["segments"]
+
+        finally:
+            if model is not None: del model
+            if model_a is not None: del model_a
+            gc.collect()
+            if device == "cuda":
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()

@@ -12,3 +12,4 @@ numpy
 
 # Thư viện giao diện (nếu bạn đang dùng CustomTkinter cho GUI)
 customtkinter
+wikipedia

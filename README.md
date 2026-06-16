@@ -53,3 +53,31 @@ Chạy file chính của dự án:
 
 Bash
 python main.py
+
+---
+
+## Burn (hardcode) SRT vào MP4 bằng FFmpeg (giảm lệch desync)
+
+Script: `burn_srt_to_mp4.py`
+
+### Cách chạy
+
+Bash
+python burn_srt_to_mp4.py --video input/test4.mp4 --srt "input/test4_sub.srt" --out "output/test4_burn.mp4"
+
+Script sẽ:
+
+- Dùng `ffprobe` để lấy FPS của video đầu vào
+- Ép video đầu ra về **CFR đúng FPS đó** (re-encode)
+- Hardcode subtitles bằng filter `subtitles=...:force_style=...`
+
+### Một số tham số hữu ích
+
+- `--encoder libx264` (mặc định) hoặc đổi sang encoder khác nếu bạn muốn
+- `--crf 18 --preset medium` (tuỳ chỉnh chất lượng/size)
+- `--no-audio-reencode` : cố gắng copy audio (nếu bạn muốn giữ audio nguyên bản)
+
+### Nếu vẫn lệch
+
+- Kiểm tra FPS video bằng `ffprobe`
+- Xem SRT có bị lỗi timestamp/format hay không (đặc biệt dòng thời gian)
